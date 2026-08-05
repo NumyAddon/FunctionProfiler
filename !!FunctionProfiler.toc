@@ -7,7 +7,7 @@
 ## Notes: FunctionProfiler allows addon developers to more easily measure performance of specific functions.
 ## Author: Numy
 ## SavedVariables: FunctionProfilerDB
-## IconTexture: Interface\Addons\FunctionProfiler\media\icon
+## IconTexture: Interface\Addons\!!FunctionProfiler\media\icon
 ## X-Curse-Project-ID: 1640522
 ## X-Wago-ID: b6XerjKp
 ## Category: Development Tools
