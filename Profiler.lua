@@ -987,14 +987,14 @@ function FP:InitMinimapButton()
     end
 end
 
-EventUtil.ContinueOnAddOnLoaded(addonName, function()
+function FP:Init()
     _G.FunctionProfilerDB = FunctionProfilerDB or {};
     FP.db = FunctionProfilerDB;
 
     FP:InitUI();
-    if C_AddOns.IsAddOnLoaded("BlizzMove") then
+    EventUtil.ContinueOnAddOnLoaded("BlizzMove", function()
         FP:RegisterIntoBlizzMove();
-    end
+    end);
 
     FP:InitMinimapButton();
 
@@ -1012,5 +1012,6 @@ EventUtil.ContinueOnAddOnLoaded(addonName, function()
         ns.API:WrapInPlace("FunctionProfiler", "FP", FP, "SortFilteredData");
         ns.API:WrapInPlace("FunctionProfiler", "Buffer", ns.Buffer, "Squash");
     end
-end)
+end
 
+FP:Init();

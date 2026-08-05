@@ -7,6 +7,7 @@
 ## Notes: FunctionProfiler allows addon developers to more easily measure performance of specific functions.
 ## Author: Numy
 ## SavedVariables: FunctionProfilerDB
+## LoadSavedVariablesFirst: 1
 ## IconTexture: Interface\Addons\!!FunctionProfiler\media\icon
 ## X-Curse-Project-ID: 1640522
 ## X-Wago-ID: b6XerjKp
@@ -18,7 +19,6 @@
 ## Category-ptBR: Ferramentas de Desenvolvimento
 ## Category-ruRU: Инструменты разработки
 ## Category-zhCN: 开发工具
-## OptionalDeps: BlizzMove
 
 libs/embeds.xml
 
