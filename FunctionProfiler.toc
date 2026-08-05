@@ -8,8 +8,8 @@
 ## Author: Numy
 ## SavedVariables: FunctionProfilerDB
 ## IconTexture: Interface\Addons\FunctionProfiler\media\icon
-## X-Curse-Project-ID: -------
-## X-Wago-ID: ----------
+## X-Curse-Project-ID: 1640522
+## X-Wago-ID: b6XerjKp
 ## Category: Development Tools
 ## Category-deDE: Entwicklungstools
 ## Category-esES: Herramientas de Desarrollo

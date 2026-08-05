@@ -113,6 +113,7 @@ function API:EnableLogging()
     ns.FP.purgeTicker = C_Timer.NewTicker(5, function() ns.FP:PurgeOldData() end)
 
     ns.FP.Display.ScrollBox:Flush()
+    ns.FP:UpdateMinimapIcon()
 end
 
 function API:DisableLogging()
@@ -128,6 +129,7 @@ function API:DisableLogging()
 
     ns.FP.data = {}
     ns.FP.dataProvider = nil
+    ns.FP:UpdateMinimapIcon()
     ns.Buffer:Reset()
 end
 

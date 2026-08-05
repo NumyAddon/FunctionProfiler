@@ -860,82 +860,157 @@ function FP:RegisterIntoBlizzMove()
     end
 end
 
+function FP:Print(...)
+    print('|cff33ff99FunctionProfiler|r:', ...);
+end
+
+--- @param message string
+function FP:SlashCommand(message)
+    message = message:trim():lower();
+    if message == '' or message == 'ui' then
+        API:ToggleFrame();
+    elseif message == 'disable' then
+        API:DisableLogging();
+        self:Print('Logging has been disabled.')
+    elseif message == 'enable' then
+        API:EnableLogging();
+        self:Print('Logging has been enabled.')
+    elseif message == 'toggle' then
+        if API:IsLogging() then
+            API:DisableLogging();
+            self:Print('Logging has been disabled.')
+        else
+            API:EnableLogging();
+            self:Print('Logging has been enabled.')
+        end
+    elseif message == 'reset' then
+        if API:IsLogging() then
+            API:DisableLogging();
+            API:EnableLogging();
+        end
+        if self.Display then
+            self.Display.elapsed = 60;
+        end
+        self:Print('All collected data has been reset.');
+    elseif message == 'minimap' then
+        wipe(self.db.minimap);
+        self.db.minimap.hide = false;
+        local name = 'NumyFunctionProfiler';
+        LibStub('LibDBIcon-1.0'):Hide(name);
+        LibStub('LibDBIcon-1.0'):Show(name);
+
+        self:Print('Minimap button has been restored.');
+    else
+        self:Print('Commands:');
+        print('  help - show this help message');
+        print('  ui (or nothing) - toggle the profiler frame');
+        print('  disable - disable the profiler');
+        print('  enable - enable the profiler');
+        print('  toggle - disable / enable the profiler')
+        print('  reset - reset all collected data');
+        print('  minimap - reset the minimap button');
+    end
+end
+
+function FP:InitMinimapButton()
+    self.db.minimap = self.db.minimap or {};
+
+    -- function copied from LibDBIcon-1.0.lua
+    local function getAnchors(frame)
+        local x, y = frame:GetCenter()
+        if not x or not y then return "CENTER" end
+        local hHalf = (x > UIParent:GetWidth()*2/3) and "RIGHT" or (x < UIParent:GetWidth()/3) and "LEFT" or ""
+        local vHalf = (y > UIParent:GetHeight()/2) and "TOP" or "BOTTOM"
+        return vHalf..hHalf, frame, (vHalf == "TOP" and "BOTTOM" or "TOP")..hHalf
+    end
+
+    local function showTooltip(minimapButton)
+        GameTooltip:SetOwner(minimapButton, 'ANCHOR_NONE')
+        GameTooltip:SetPoint(getAnchors(minimapButton))
+
+        GameTooltip:AddLine('Function Profiler ' .. (
+            API:IsLogging()
+                and GREEN_FONT_COLOR:WrapTextInColorCode("enabled")
+                or RED_FONT_COLOR:WrapTextInColorCode("disabled")
+        ))
+        GameTooltip:AddLine('|cffeda55fLeft-Click|r to toggle the frame')
+        GameTooltip:AddLine('|cffeda55fRight-Click|r to toggle logging')
+
+        GameTooltip:Show()
+    end
+
+    local name = 'NumyFunctionProfiler'
+    local function getIcon()
+        return API:IsLogging()
+            and 'interface/icons/inv_misc_pocketwatch_01'
+            or 'interface/icons/achievement_guild_timeoff'
+    end
+    local dataObject
+    dataObject = LibStub('LibDataBroker-1.1'):NewDataObject(
+        name,
+        {
+            type = 'launcher',
+            text = 'FunctionProfiler',
+            icon = getIcon(),
+            OnClick = function(minimapButton, button)
+            if IsShiftKeyDown() then
+                self.db.minimap.hide = true;
+                LibStub('LibDBIcon-1.0'):Hide(name);
+                self:Print('Minimap button hidden. Use |cffeda55f/fp minimap|r to restore.');
+
+                return;
+            end
+                if button == 'LeftButton' then
+                    API:ToggleFrame()
+                else
+                    if API:IsLogging() then
+                        API:DisableLogging()
+                    else
+                        API:EnableLogging()
+                    end
+                    showTooltip(minimapButton)
+                end
+            end,
+            OnEnter = function(minimapButton)
+                showTooltip(minimapButton)
+            end,
+            OnLeave = function()
+                GameTooltip:Hide()
+            end,
+        }
+    )
+    LibStub('LibDBIcon-1.0'):Register(name, dataObject, self.db.minimap)
+    self.UpdateMinimapIcon = function()
+        dataObject.icon = API:IsLogging()
+            and 'interface/icons/inv_misc_pocketwatch_01'
+            or 'interface/icons/achievement_guild_timeoff'
+    end
+end
+
 EventUtil.ContinueOnAddOnLoaded(addonName, function()
+    _G.FunctionProfilerDB = FunctionProfilerDB or {};
+    FP.db = FunctionProfilerDB;
+
     FP:InitUI();
     if C_AddOns.IsAddOnLoaded("BlizzMove") then
         FP:RegisterIntoBlizzMove();
     end
 
+    FP:InitMinimapButton();
+
+    SLASH_NUMY_FUNCTION_PROFILER1 = '/fp';
+    SLASH_NUMY_FUNCTION_PROFILER2 = '/nfp';
+    SLASH_NUMY_FUNCTION_PROFILER3 = '/functionprofiler';
+    SlashCmdList['NUMY_FUNCTION_PROFILER'] = function(message)
+        FP:SlashCommand(message);
+    end;
+
     -- self profiling.. be careful
     do
-        ns.API:WrapModules("FunctionProfiler", "FP", FP, 1);
+        ns.API:WrapInPlace("FunctionProfiler", "FP", FP, "PurgeOldData");
+        ns.API:WrapInPlace("FunctionProfiler", "FP", FP, "PrepareFilteredData");
+        ns.API:WrapInPlace("FunctionProfiler", "FP", FP, "SortFilteredData");
         ns.API:WrapInPlace("FunctionProfiler", "Buffer", ns.Buffer, "Squash");
-    end
-
-    -- minimap button
-    do
-        FunctionProfilerDB = FunctionProfilerDB or {}
-        FunctionProfilerDB.minimap = FunctionProfilerDB.minimap or {}
-
-        -- function copied from LibDBIcon-1.0.lua
-        local function getAnchors(frame)
-            local x, y = frame:GetCenter()
-            if not x or not y then return "CENTER" end
-            local hHalf = (x > UIParent:GetWidth()*2/3) and "RIGHT" or (x < UIParent:GetWidth()/3) and "LEFT" or ""
-            local vHalf = (y > UIParent:GetHeight()/2) and "TOP" or "BOTTOM"
-            return vHalf..hHalf, frame, (vHalf == "TOP" and "BOTTOM" or "TOP")..hHalf
-        end
-
-        local function showTooltip(minimapButton)
-            GameTooltip:SetOwner(minimapButton, 'ANCHOR_NONE')
-            GameTooltip:SetPoint(getAnchors(minimapButton))
-
-            GameTooltip:AddLine('Function Profiler ' .. (
-                API:IsLogging()
-                    and GREEN_FONT_COLOR:WrapTextInColorCode("enabled")
-                    or RED_FONT_COLOR:WrapTextInColorCode("disabled")
-            ))
-            GameTooltip:AddLine('|cffeda55fLeft-Click|r to toggle the frame')
-            GameTooltip:AddLine('|cffeda55fRight-Click|r to toggle logging')
-
-            GameTooltip:Show()
-        end
-
-        local name = 'NumyFunctionProfiler'
-        local function getIcon()
-            return API:IsLogging()
-                and 'interface/icons/inv_misc_pocketwatch_01'
-                or 'interface/icons/achievement_guild_timeoff'
-        end
-        local dataObject
-        dataObject = LibStub('LibDataBroker-1.1'):NewDataObject(
-            name,
-            {
-                type = 'launcher',
-                text = 'Numy Profiler',
-                icon = getIcon(),
-                OnClick = function(minimapButton, button)
-                    if button == 'LeftButton' then
-                        API:ToggleFrame()
-                    else
-                        if API:IsLogging() then
-                            API:DisableLogging()
-                        else
-                            API:EnableLogging()
-                        end
-                        dataObject.icon = getIcon()
-                        showTooltip(minimapButton)
-                    end
-                end,
-                OnEnter = function(minimapButton)
-                    showTooltip(minimapButton)
-                end,
-                OnLeave = function()
-                    GameTooltip:Hide()
-                end,
-            }
-        )
-        LibStub('LibDBIcon-1.0'):Register(name, dataObject, FunctionProfilerDB.minimap)
     end
 end)
 
