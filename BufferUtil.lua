@@ -4,14 +4,18 @@ local tRemoveMulti = table.removemulti
 
 --- @class FP_Buffer
 local Buffer = {
+    --- @type FP_BufferContainer[]
     containers = {},
+    pendingSquash = false,
+    curTickIndex = 1,
+    tickMap = { [1] = GetTime() },
 };
 ns.Buffer = Buffer;
 
 local BUCKET_CUTOFF = 2000; -- rather arbitrary number, but interestingly, the lower your fps, the less often actual work will be performed to purge old data ^^
 
 local frame = CreateFrame("Frame");
-local doSquash = function() Buffer:Squash(); end;
+local doTick = function() Buffer:Tick(); end;
 frame:SetScript("OnUpdate", nil);
 
 --- @class FP_BufferContainer
@@ -27,11 +31,23 @@ function Buffer:GetContainer(owner)
     return self.containers[owner];
 end
 
+function Buffer:Tick()
+    self.curTickIndex = self.curTickIndex + 1;
+    self.tickMap[self.curTickIndex] = GetTime();
+    if not Buffer.pendingSquash then
+        Buffer.pendingSquash = true;
+        C_Timer.After(1, function() Buffer:Squash(); end);
+    end
+end
+
 function Buffer:Squash()
+    self.pendingSquash = false;
     frame:SetScript("OnUpdate", nil);
     for _, container in pairs(self.containers) do
         container:Squash();
     end
+    self.curTickIndex = 1;
+    self.tickMap = { [1] = GetTime() };
 end
 
 function Buffer:Reset()
@@ -42,7 +58,7 @@ end
 function BufferContainerMixin:Init()
     --- @type FP_BufferSquashedEntry[]
     self.entries = {};
-    --- @type {time: number, mem: number}[]
+    --- @type {time: number, mem: number, tick: number}[]
     self.buffer = {};
     --- @type FP_Bucket[]
     self.buckets = {};
@@ -51,9 +67,9 @@ function BufferContainerMixin:Init()
 end
 
 function BufferContainerMixin:Insert(time, mem)
-    frame:SetScript("OnUpdate", doSquash);
+    frame:SetScript("OnUpdate", doTick);
     self.pending = true;
-    tInsert(self.buffer, { time = time, mem = mem});
+    tInsert(self.buffer, { time = time, mem = mem, tick = Buffer.curTickIndex });
 end
 
 function BufferContainerMixin:InitNewBucket()
@@ -141,14 +157,26 @@ end
 
 function BufferContainerMixin:Squash()
     if not self.pending then return; end
-    local squashed = {
-        totalTime = 0,
-        worstTime = 0,
-        totalMem = 0,
-        worstMem = 0,
-        entryCount = 0,
-    };
+    local lastBucket = self.lastBucket;
+    local tickIndex = nil;
+    local squashed = nil;
     for _, entry in pairs(self.buffer) do
+        if entry.tick ~= tickIndex then
+            tickIndex = entry.tick;
+            squashed = {
+                totalTime = 0,
+                worstTime = 0,
+                totalMem = 0,
+                worstMem = 0,
+                entryCount = 0,
+            };
+
+            local curTickIndex = lastBucket.curTickIndex + 1;
+            lastBucket.curTickIndex = curTickIndex;
+            lastBucket.tickMap[curTickIndex] = Buffer.tickMap[tickIndex];
+            lastBucket.entries[curTickIndex] = squashed;
+        end
+
         squashed.entryCount = squashed.entryCount + 1;
         squashed.totalTime = squashed.totalTime + entry.time;
         squashed.totalMem = squashed.totalMem + entry.mem;
@@ -159,12 +187,6 @@ function BufferContainerMixin:Squash()
             squashed.worstMem = entry.mem;
         end
     end
-
-    local lastBucket = self.lastBucket;
-    local curTickIndex = lastBucket.curTickIndex + 1;
-    lastBucket.curTickIndex = curTickIndex;
-    lastBucket.tickMap[curTickIndex] = GetTime();
-    lastBucket.entries[curTickIndex] = squashed;
 
     self.buffer = {};
     self.pending = false;

@@ -149,7 +149,7 @@ function FP:InitUI()
     end
     local TIME_FORMAT = function(val) return (val > 0.0005 and whiteColorFormat or greyColorFormat):format(("%.3f"):format(val)) .. msText; end;
     local ROUND_TIME_FORMAT = function(val) return (val > 0.0005 and whiteColorFormat or greyColorFormat):format(val) .. msText; end;
-    local FRACTIONAL_COUNTER_FORMAT = function(val) return (val > 0.0005 and whiteColorFormat or greyColorFormat):format(("%.1f"):format(val)) .. xText; end;
+    local FRACTIONAL_COUNTER_FORMAT = function(val) return (val > 0.05 and whiteColorFormat or greyColorFormat):format(("%.1f"):format(val)) .. xText; end;
     local COUNTER_FORMAT = function(val) return (val > 0.0005 and whiteColorFormat or greyColorFormat):format(math.ceil(val)) .. xText; end;
     local RAW_FORMAT = function(val) return val; end;
     local PERCENT_FORMAT = function(val)
@@ -319,50 +319,62 @@ function FP:InitUI()
         --- @class FP_Display: ButtonFrameTemplate
         local display = CreateFrame("Frame", "FunctionProfilerFrame", UIParent, "ButtonFrameTemplate");
         FP.Display = display;
-        local width = 40;
-        for _, info in pairs(COLUMN_INFO) do
-            width = width + (info.width - 2)
-        end
-        display:SetSize(width, 651);
-        display:SetPoint("CENTER", 0, 0);
-        display:SetMovable(true);
-        display:EnableMouse(true);
-        display:SetToplevel(true);
-        display:SetScript("OnShow", function()
-            display.elapsed = UPDATE_INTERVAL
-
-            if continuousUpdate then
-                display:SetScript("OnUpdate", display.OnUpdate)
+        do
+            local width = 40;
+            for _, info in pairs(COLUMN_INFO) do
+                width = width + (info.width - 2)
             end
-        end);
-        display:SetScript("OnHide", function()
-            display:SetScript("OnUpdate", nil);
-        end);
-        display:Hide();
+            display:SetSize(width, 651);
+            display:SetPoint("CENTER", 0, 0);
+            display:SetMovable(true);
+            display:EnableMouse(true);
+            display:SetToplevel(true);
+            display:SetScript("OnShow", function()
+                display.elapsed = UPDATE_INTERVAL
 
-        function display:OnUpdate(elapsed)
-           self.elapsed = (self.elapsed or 0) + elapsed
-           if self.elapsed >= UPDATE_INTERVAL then
-               FP:PrepareFilteredData()
+                if continuousUpdate then
+                    display:SetScript("OnUpdate", display.OnUpdate)
+                end
+            end);
+            display:SetScript("OnHide", function()
+                display:SetScript("OnUpdate", nil);
+            end);
+            display:Hide();
 
-               local perc = self.ScrollBox:GetScrollPercentage()
-               self.ScrollBox:Flush()
+            function display:OnUpdate(elapsed)
+               self.elapsed = (self.elapsed or 0) + elapsed
+               if self.elapsed >= UPDATE_INTERVAL then
+                   FP:PrepareFilteredData()
 
-               if FP.dataProvider then
-                   self.ScrollBox:SetDataProvider(FP.dataProvider)
-                   self.ScrollBox:SetScrollPercentage(perc)
+                   local perc = self.ScrollBox:GetScrollPercentage()
+                   self.ScrollBox:Flush()
+
+                   if FP.dataProvider then
+                       self.ScrollBox:SetDataProvider(FP.dataProvider)
+                       self.ScrollBox:SetScrollPercentage(perc)
+                   end
+
+                   self.elapsed = 0
                end
+            end
 
-               self.elapsed = 0
-           end
+            function display:RefreshActiveColumns()
+                display.activeColumns = {}
+                for ID, info in pairs(COLUMN_INFO) do
+                    t_insert(display.activeColumns, info)
+                end
+                table.sort(display.activeColumns, function(a, b) return a.order < b.order end)
+            end
+
+            display:RefreshActiveColumns()
+
+            ButtonFrameTemplate_HidePortrait(display)
+
+            display:SetTitle("|cffe03d02Numy:|r Function Profiler")
+
+            display.Inset:SetPoint("TOPLEFT", 8, -86)
+            display.Inset:SetPoint("BOTTOMRIGHT", -4, 30)
         end
-
-        ButtonFrameTemplate_HidePortrait(display)
-
-        display:SetTitle("|cffe03d02Numy:|r Function Profiler")
-
-        display.Inset:SetPoint("TOPLEFT", 8, -86)
-        display.Inset:SetPoint("BOTTOMRIGHT", -4, 30)
 
         local titleBar = CreateFrame("Frame", nil, display, "PanelDragBarTemplate")
         display.TitleBar = titleBar
@@ -418,16 +430,6 @@ function FP:InitUI()
                 end
             end)
         end
-
-        function display:RefreshActiveColumns()
-            display.activeColumns = {}
-            for ID, info in pairs(COLUMN_INFO) do
-                t_insert(display.activeColumns, info)
-            end
-            table.sort(display.activeColumns, function(a, b) return a.order < b.order end)
-        end
-
-        display:RefreshActiveColumns()
 
         --- @class FP_Display.Headers: ColumnDisplayTemplate
         local headers = CreateFrame("Button", "$parentHeaders", display, "ColumnDisplayTemplate")
@@ -838,6 +840,20 @@ function FP:InitUI()
                 end
             end);
         end
+
+        local autoEnableCheckbox = CreateFrame("CheckButton", "$parentAutoEnableCheckbox", display, "UICheckButtonTemplate");
+        display.AutoEnableCheckbox = autoEnableCheckbox;
+        do
+            autoEnableCheckbox:SetPoint("LEFT", toggleButton, "RIGHT", 15, 0);
+            autoEnableCheckbox:SetSize(25, 25);
+            autoEnableCheckbox:SetChecked(FP.db.startEnabled);
+
+            autoEnableCheckbox.Text:SetText("Auto-enable on login");
+            autoEnableCheckbox:SetHitRectInsets(0, -autoEnableCheckbox.Text:GetWidth() - 5, 0, 0);
+            autoEnableCheckbox:SetScript("OnClick", function(btn)
+                FP.db.startEnabled = btn:GetChecked();
+            end);
+        end
     end
 end
 
@@ -987,30 +1003,47 @@ function FP:InitMinimapButton()
     end
 end
 
-function FP:Init()
+function FP:InitDB()
     _G.FunctionProfilerDB = FunctionProfilerDB or {};
-    FP.db = FunctionProfilerDB;
+    --- @type FP_DB
+    self.db = FunctionProfilerDB;
 
-    FP:InitUI();
+    --- @class FP_DB
+    local defaults = {
+        startEnabled = false,
+    };
+    for k, v in pairs(defaults) do
+        if self.db[k] == nil then self.db[k] = v; end
+    end
+end
+
+function FP:Init()
+    self:InitDB();
+    self:InitUI();
     EventUtil.ContinueOnAddOnLoaded("BlizzMove", function()
-        FP:RegisterIntoBlizzMove();
+        self:RegisterIntoBlizzMove();
     end);
 
-    FP:InitMinimapButton();
+    self:InitMinimapButton();
 
     SLASH_NUMY_FUNCTION_PROFILER1 = '/fp';
     SLASH_NUMY_FUNCTION_PROFILER2 = '/nfp';
     SLASH_NUMY_FUNCTION_PROFILER3 = '/functionprofiler';
     SlashCmdList['NUMY_FUNCTION_PROFILER'] = function(message)
-        FP:SlashCommand(message);
+        self:SlashCommand(message);
     end;
 
     -- self profiling.. be careful
     do
-        ns.API:WrapInPlace("FunctionProfiler", "FP", FP, "PurgeOldData");
-        ns.API:WrapInPlace("FunctionProfiler", "FP", FP, "PrepareFilteredData");
-        ns.API:WrapInPlace("FunctionProfiler", "FP", FP, "SortFilteredData");
+        ns.API:WrapInPlace("FunctionProfiler", "FP", self, "PurgeOldData");
+        ns.API:WrapInPlace("FunctionProfiler", "FP", self, "PrepareFilteredData");
+        ns.API:WrapInPlace("FunctionProfiler", "FP", self, "SortFilteredData");
         ns.API:WrapInPlace("FunctionProfiler", "Buffer", ns.Buffer, "Squash");
+    end
+
+    if self.db.startEnabled then
+        ns.API:EnableLogging();
+        self:Print("profiling on start-up has been enabled. Don't forget to turn it off if it starts to affect your performance.")
     end
 end
 
