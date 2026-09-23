@@ -6,6 +6,8 @@
 #@end-debug@
 ## Notes: FunctionProfiler allows addon developers to more easily measure performance of specific functions.
 ## Author: Numy
+## X-GameType: [Game]
+## X-GameFamily: [Family]
 ## SavedVariables: FunctionProfilerDB
 ## LoadSavedVariablesFirst: 1
 ## IconTexture: Interface\Addons\!!FunctionProfiler\media\icon
